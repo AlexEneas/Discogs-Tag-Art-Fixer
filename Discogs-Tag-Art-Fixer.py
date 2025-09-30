@@ -15,17 +15,11 @@ except ImportError:
     print("[INFO] Pillow not installed; album-art size checks/embeds will be partially disabled.")
 
 # ===================== CONFIG =====================
-# Discogs credentials
-# Prefer Consumer Key/Secret for official app + higher rate limit + image URLs
-DISCOGS_KEY    = "xACNKfxTAAJOoYlrUPWT"
-DISCOGS_SECRET = "OWMNTnnqQgCHPlIJHIHYTmOqCuVEAHWJ"
-
-# (Optional) If you also want to support a personal token for yourself,
-# put it here; the script will send both header and token param when helpful.
-DISCOGS_TOKEN = None  # e.g., "put-your-personal-access-token-here"
+# Discogs personal access token (provided by you)
+DISCOGS_TOKEN = "GsvGdCIMzduoCAMFIrCRgDExsSfnJTvoxtcklqXx"
 
 DISCOGS_SEARCH = "https://api.discogs.com/database/search"
-USER_AGENT = "Discogs Tag & Art Fixer/2.9 (+https://github.com/your-username/discogs-tag-art-fixer)"
+USER_AGENT = "Discogs Tag & Art Fixer (+https://github.com/AlexEneas/Discogs-Tag-Art-Fixer)"
 
 PLACEHOLDER_FILENAME = "placeholder.jpg"  # file next to script
 MIN_ART_SIZE = 500                         # px (width or height)
@@ -186,22 +180,6 @@ def get_artist_title_from_tags(path: Path) -> Tuple[str, str, Optional[str]]:
     title_for_search = re.sub(r"\s*\([^)]*\)\s*", " ", title or "").strip()
     return artist or "", title_for_search or "", mix
 
-# ---------------------- Discogs auth helpers ----------------------
-def build_auth_headers() -> Dict[str, str]:
-    # Use Discogs Auth header; key/secret identify the app and raise rate limits
-    hdr = {
-        "User-Agent": USER_AGENT,
-        "Authorization": f"Discogs key={DISCOGS_KEY}, secret={DISCOGS_SECRET}",
-    }
-    return hdr
-
-def maybe_auth_params(existing: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    # Optionally include token in query params (not required for search/details)
-    params = dict(existing or {})
-    if DISCOGS_TOKEN:
-        params["token"] = DISCOGS_TOKEN
-    return params
-
 # ---------------------- Discogs search + ranking ----------------------
 class RetryableDiscogsError(Exception): ...
 
@@ -229,7 +207,7 @@ def rank_results(results: List[Dict[str, Any]], artist: str, title: str, mix: Op
     return None
 
 def discogs_search(artist: str, title: str, mix: Optional[str], delay: float) -> Optional[Dict[str, Any]]:
-    headers = build_auth_headers()
+    headers = {"User-Agent": USER_AGENT}
     sess = requests.Session()
     queries: List[Dict[str, str]] = []
     if artist and title:
@@ -240,12 +218,10 @@ def discogs_search(artist: str, title: str, mix: Optional[str], delay: float) ->
     queries.append({"q": f"{artist} {title}".strip()})
 
     for params in queries:
-        params = maybe_auth_params({
-            **params,
-            "type": "release",
-            "sort": "relevance",
-            "per_page": "10",
-        })
+        params["token"] = DISCOGS_TOKEN
+        params["type"] = "release"
+        params["sort"] = "relevance"
+        params["per_page"] = "10"
         try:
             r = sess.get(DISCOGS_SEARCH, headers=headers, params=params, timeout=20)
             if r.status_code == 429:
@@ -267,8 +243,8 @@ def discogs_search(artist: str, title: str, mix: Optional[str], delay: float) ->
     return None
 
 def fetch_release_details(resource_url: str) -> Optional[Dict[str, Any]]:
-    headers = build_auth_headers()
-    params  = maybe_auth_params({})
+    headers = {"User-Agent": USER_AGENT}
+    params  = {"token": DISCOGS_TOKEN}
     try:
         r = requests.get(resource_url, headers=headers, params=params, timeout=20)
         if r.status_code == 429:
@@ -295,13 +271,9 @@ def choose_best_image(images: List[Dict[str, Any]], min_size: int = MIN_ART_SIZE
     return scored[0][3]
 
 def download_image(url: str) -> Optional[bytes]:
-    headers = build_auth_headers()
+    headers = {"User-Agent": USER_AGENT}
     try:
-        # Discogs image endpoints usually work without auth, but include header anyway
-        r = requests.get(url, headers=headers, timeout=30)
-        if r.status_code in (401, 403):
-            # As fallback, try passing token param if available
-            r = requests.get(url, headers=headers, params=maybe_auth_params({}), timeout=30)
+        r = requests.get(url, headers=headers, params={"token": DISCOGS_TOKEN}, timeout=30)
         r.raise_for_status()
         return r.content
     except requests.RequestException:
@@ -466,10 +438,12 @@ def find_audio_files(root: Path, recursive: bool) -> List[Path]:
     files: List[Path] = []
     if recursive:
         for ext in ALL_AUDIO_EXTS:
-            files.extend(root.rglob(f"*{ext}")); files.extend(root.rglob(f"*{ext.upper()}"))
+            files.extend(root.rglob(f"*{ext}"))
+            files.extend(root.rglob(f"*{ext.upper()}"))
     else:
         for ext in ALL_AUDIO_EXTS:
-            files.extend(root.glob(f"*{ext}")); files.extend(root.glob(f"*{ext.upper()}"))
+            files.extend(root.glob(f"*{ext}"))
+            files.extend(root.glob(f"*{ext.upper()}"))
     return sorted(files)
 
 # ---------------------- per-file processing ----------------------
@@ -659,6 +633,5 @@ def main():
     print(f"\nDone. Wrote {len(rows)} rows to: {out_path.resolve()}")
     print("CSV columns: file, artist, title, mix, year, label, discogs_url, match_confidence, tag_status, art_status, art_source_url, notes")
 
-# ---- end main ----
 if __name__ == "__main__":
     main()

@@ -16,7 +16,7 @@ except ImportError:
 
 # ===================== CONFIG =====================
 # Discogs personal access token (provided by you)
-DISCOGS_TOKEN = "PLEASE_USE_YOUR_OWN_DISCOGS_TOKEN"
+DISCOGS_TOKEN = "REPLACE_THIS_WITH_YOUR_OWN_TOKEN"
 
 DISCOGS_SEARCH = "https://api.discogs.com/database/search"
 USER_AGENT = "Discogs Tag & Art Fixer (+https://github.com/AlexEneas/Discogs-Tag-Art-Fixer)"
